@@ -1,4 +1,4 @@
-import dropbox, shutil, tarfile, datetime, sys
+import dropbox, shutil, tarfile, datetime, sys, os
 from config import config
 from subprocess import call
 from tempfile import mkdtemp
@@ -51,7 +51,8 @@ def decrypt(in_file, out_file, password, key_length=32):
         out_file.write(chunk)
 
 date = datetime.date.today().strftime("%d.%m.%Y")
-dbx = dropbox.Dropbox(config["ACCESS_TOKEN"])
+client = dropbox.client.DropboxClient(config["ACCESS_TOKEN"])
+#dbx = dropbox.Dropbox(config["ACCESS_TOKEN"])
 
 # now = datetime.datetime.now()
 # for entry in dbx.files_list_folder('').entries:
@@ -106,8 +107,19 @@ with open(tar_path, "r") as in_file, open(enc_tar_path, "w") as out_file:
     encrypt(in_file, out_file, config["ENC_PASSWORD"])
 
 # upload to dropbox
+stat = os.stat(enc_tar_path)
+size = stat.st_size
 with open(enc_tar_path, "r") as in_upload:
-    dbx.files_upload(in_upload, "/" + config["NAME_PREFIX"] + date + ".aes", autorename=True)
+    uploader = client.get_chunked_uploader(in_upload, size)
+    
+    while uploader.offset < size:
+        try:
+            upload = uploader.upload_chunked()
+        except rest.ErrorResponse, e:
+            print("failed to upload...")
+            print(e)
+
+    uploader.finish("/" + config["NAME_PREFIX"] + date + ".aes", overwrite=True)
 
 # decrypt for test
 # with open(enc_tar_path, "r") as in_file, open(enc_tar_path + ".tar.gz", "w") as out_file:
